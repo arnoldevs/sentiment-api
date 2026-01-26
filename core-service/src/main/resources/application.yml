@@ -1,0 +1,68 @@
+# --- INFRAESTRUCTURA DEL SERVICIO ---
+server:
+  # Railway inyecta la variable PORT. Si no existe, usa 8080 (local).
+  port: ${PORT:8080}
+  netty:
+    connection-timeout: 180s
+
+spring:
+  application:
+    name: Sentiment-Core
+  r2dbc:
+    # Esto permite que si Railway nos da una URL completa, la usemos.
+    # Si no, usa la local.
+    url: ${DB_URL:r2dbc:postgresql://localhost:5432/cesium_sentiment_db}
+    username: ${DB_USER:cesium_user}
+    password: ${DB_PASSWORD:cesium_password}
+    pool:
+      initial-size: 5
+      max-size: 20
+      validation-query: SELECT 1
+
+  sql:
+    init:
+      mode: always # Garantiza la integridad del esquema y vistas en entornos efímeros.
+
+  # Configuración de transferencia (WebFlux):
+  # Optimiza el manejo de buffers para flujos binarios y carga de archivos.
+  http:
+    codecs:
+      # Evita DataBufferLimitException en el streaming de CSVs grandes.
+      # Tamaño seguro para un CSV de 500KB + Overhead
+      max-in-memory-size: 1MB
+
+# --- INTEGRACIÓN: ANALYTICS ENGINE (FASTAPI) ---
+app:
+  sentiment-engine:
+    # Esto es CRÍTICO. En la nube apuntará al dominio interno de Railway.
+    url: ${PYTHON_ENGINE_URL:http://localhost:5000}
+    timeout: 180000
+
+# --- OBSERVABILIDAD Y TELEMETRÍA ---
+management:
+  endpoint:
+    health:
+      # Telemetría de dependencias críticas (Postgres/IA) para monitoreo de salud.
+      show-details: always
+  endpoints:
+    web:
+      exposure:
+        include: health, info, metrics
+
+# --- AUDITORÍA Y CONTRATOS API ---
+logging:
+  level:
+    # Trazabilidad de operaciones R2DBC para debugging en flujos asíncronos.
+    "[org.springframework.data.r2dbc]": INFO # DEBUG genera demasiado ruido en cargas masivas
+    "[com.cesiumflow]": DEBUG # Solo el código en debug
+
+springdoc:
+  # Contrato OpenAPI para validación de endpoints y consumo del cliente (Frontend).
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+    use-root-path: true
+  show-actuator: true
